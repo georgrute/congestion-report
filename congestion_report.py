@@ -4,7 +4,9 @@ from datetime import datetime, timedelta
 
 # API Configuration
 API_URL = "https://congestion-tracker-api.claw.gridraven.com/api/v1/congestion/lines-timeseries"
-SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL")
+SLACK_API_URL = "https://slack.com/api/chat.postMessage"
+SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN")
+SLACK_CHANNEL_ID = os.environ.get("SLACK_CHANNEL_ID")
 
 def get_congestion_data():
     # Calculate past 72-hour window in ISO-8601 UTC format
@@ -49,13 +51,7 @@ def process_top_lines(data):
     top_5_rt = sorted(lines_summary, key=lambda x: x["rt_cost"], reverse=True)[:5]
     return top_5_da, top_5_rt
 
-def send_slack_notification(top_5_da, top_5_rt):
-    if not SLACK_WEBHOOK_URL:
-        print("Slack Webhook URL missing. Summary output:")
-        print("Top 5 by Day-Ahead Cost:", top_5_da)
-        print("Top 5 by Real-Time Cost:", top_5_rt)
-        return
-
+def build_slack_blocks(top_5_da, top_5_rt):
     blocks = [
         {
             "type": "header",
@@ -96,7 +92,32 @@ def send_slack_notification(top_5_da, top_5_rt):
             "text": {"type": "mrkdwn", "text": line_text}
         })
 
-    requests.post(SLACK_WEBHOOK_URL, json={"blocks": blocks})
+    return blocks
+
+def send_slack_notification(top_5_da, top_5_rt):
+    blocks = build_slack_blocks(top_5_da, top_5_rt)
+
+    if not SLACK_BOT_TOKEN or not SLACK_CHANNEL_ID:
+        print("Slack credentials missing. Summary output:")
+        print("Top 5 by Day-Ahead Cost:", top_5_da)
+        print("Top 5 by Real-Time Cost:", top_5_rt)
+        return
+
+    response = requests.post(
+        SLACK_API_URL,
+        headers={
+            "Authorization": f"Bearer {SLACK_BOT_TOKEN}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "channel": SLACK_CHANNEL_ID,
+            "blocks": blocks,
+        },
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if not payload.get("ok"):
+        raise RuntimeError(f"Slack API error: {payload.get('error', 'unknown error')}")
 
 if __name__ == "__main__":
     try:
