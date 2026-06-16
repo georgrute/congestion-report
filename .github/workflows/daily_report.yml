@@ -1,0 +1,27 @@
+name: Daily Congestion Tracker
+
+on:
+  schedule:
+    # Runs everyday at 05:00 UTC
+    - cron: '0 5 * * *'
+  workflow_dispatch: # Allows you to manually trigger it via GitHub UI if needed
+
+jobs:
+  run-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: pip install requests
+
+      - name: Execute Script
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: python congestion_report.py
